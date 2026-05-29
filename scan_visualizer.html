@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RECON // Scan Visualizer</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:#0f131a; --panel-2:#131925; --line:#1d2533;
+    --line-bright:#2b3548; --ink:#d7e0ea; --muted:#7c8aa0; --faint:#4a5568;
+    --amber:#ffb000; --amber-dim:#9a6c12; --cyan:#39b6c8; --green:#37d07a;
+    --red:#ff4d57; --red-bg:#2a1216; --violet:#9d7bff;
+    --mono:'JetBrains Mono','SFMono-Regular','Cascadia Code','Consolas','DejaVu Sans Mono',ui-monospace,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scrollbar-color:var(--line-bright) transparent}
+  body{
+    font-family:var(--mono); background:var(--bg); color:var(--ink);
+    min-height:100vh; line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:
+      linear-gradient(transparent 0%, rgba(255,176,0,.012) 50%, transparent 100%),
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.18) 2px 3px),
+      radial-gradient(900px 500px at 80% -10%, rgba(57,182,200,.06), transparent 60%),
+      radial-gradient(700px 400px at 0% 0%, rgba(255,176,0,.05), transparent 55%);
+  }
+  .wrap{max-width:1320px;margin:0 auto;padding:28px 22px 80px}
+
+  /* Header */
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:14px}
+  .glyph{width:42px;height:42px;border:1px solid var(--amber);position:relative;flex:none;
+    box-shadow:0 0 0 1px rgba(255,176,0,.15) inset, 0 0 20px rgba(255,176,0,.12)}
+  .glyph::before,.glyph::after{content:"";position:absolute;background:var(--amber)}
+  .glyph::before{inset:9px 9px auto 9px;height:1px;top:9px;animation:sweep 2.6s ease-in-out infinite}
+  .glyph::after{left:50%;top:50%;width:6px;height:6px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px var(--amber)}
+  @keyframes sweep{0%,100%{top:9px}50%{top:31px}}
+  h1{font-size:1.02rem;letter-spacing:.32em;text-transform:uppercase;font-weight:700}
+  h1 span{color:var(--amber)}
+  .sub{color:var(--faint);font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;margin-top:3px}
+  .meta-line{text-align:right;font-size:.7rem;color:var(--muted);letter-spacing:.05em;max-width:560px}
+  .meta-line b{color:var(--cyan);font-weight:500}
+  .meta-line .args{display:block;color:var(--faint);word-break:break-all;margin-top:4px;font-size:.66rem}
+
+  /* Dropzone */
+  .drop{border:1px dashed var(--line-bright);background:
+      linear-gradient(180deg, var(--panel) 0%, transparent 100%);
+    border-radius:4px;padding:46px 24px;text-align:center;transition:.18s;cursor:pointer;position:relative;overflow:hidden}
+  .drop:hover,.drop.hot{border-color:var(--amber);background:linear-gradient(180deg, rgba(255,176,0,.06), transparent)}
+  .drop.hot::after{content:"";position:absolute;left:-40%;top:0;width:40%;height:100%;
+    background:linear-gradient(90deg,transparent,rgba(255,176,0,.18),transparent);animation:scan 1s linear infinite}
+  @keyframes scan{to{left:120%}}
+  .drop .big{font-size:.96rem;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+  .drop .small{color:var(--muted);font-size:.74rem;margin-top:8px;letter-spacing:.04em}
+  .drop input{display:none}
+  #fname{margin-top:12px;color:var(--cyan);font-size:.74rem;min-height:1em}
+
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--line);margin:22px 0;border-radius:4px;overflow:hidden}
+  .stat{background:var(--panel);padding:18px 18px 16px}
+  .stat .n{font-size:2.1rem;font-weight:700;line-height:1;letter-spacing:-.02em}
+  .stat .l{color:var(--muted);font-size:.66rem;letter-spacing:.18em;text-transform:uppercase;margin-top:9px}
+  .stat .bar{height:2px;background:var(--line-bright);margin-top:12px;overflow:hidden}
+  .stat .bar i{display:block;height:100%;width:0;transition:width .9s cubic-bezier(.2,.7,.2,1)}
+  .stat.s-host .n{color:var(--ink)} .stat.s-host i{background:var(--ink)}
+  .stat.s-up .n{color:var(--green)} .stat.s-up i{background:var(--green)}
+  .stat.s-port .n{color:var(--amber)} .stat.s-port i{background:var(--amber)}
+  .stat.s-svc .n{color:var(--cyan)} .stat.s-svc i{background:var(--cyan)}
+  .stat.s-vuln .n{color:var(--red)} .stat.s-vuln i{background:var(--red)}
+
+  /* Toolbar */
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+  .field{position:relative;flex:1;min-width:230px}
+  input[type=text],select{width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink);
+    font-family:var(--mono);font-size:.8rem;padding:11px 13px;border-radius:3px;letter-spacing:.02em}
+  input[type=text]::placeholder{color:var(--faint)}
+  input:focus,select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 1px rgba(255,176,0,.25)}
+  select{flex:0 0 auto;width:auto;cursor:pointer}
+  .seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .seg button{background:var(--panel-2);color:var(--muted);border:none;font-family:var(--mono);
+    font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:11px 14px;cursor:pointer;transition:.15s}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--amber);color:#1a1206;font-weight:700}
+  .seg.danger button.on{background:var(--red);color:#fff}
+  .ghost{background:var(--panel-2);border:1px solid var(--line);color:var(--muted);font-family:var(--mono);
+    font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;padding:11px 14px;border-radius:3px;cursor:pointer;transition:.15s}
+  .ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+
+  /* Host cards */
+  .host{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:14px;
+    opacity:0;transform:translateY(8px);animation:rise .45s forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .host.vuln{border-color:#48222a;box-shadow:inset 3px 0 0 var(--red)}
+  .h-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 18px;cursor:pointer;
+    border-bottom:1px solid transparent;transition:.15s}
+  .host.open .h-head{border-bottom-color:var(--line)}
+  .h-head:hover{background:var(--panel-2)}
+  .chev{color:var(--faint);font-size:.7rem;transition:transform .2s;flex:none}
+  .host.open .chev{transform:rotate(90deg);color:var(--amber)}
+  .ip{font-size:1.16rem;font-weight:700;letter-spacing:.02em}
+  .host.vuln .ip{color:#ffd0d4}
+  .hn{color:var(--muted);font-size:.72rem;margin-top:2px;letter-spacing:.03em}
+  .badge{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;padding:4px 9px;border-radius:2px;font-weight:700;white-space:nowrap}
+  .b-up{background:rgba(55,208,122,.13);color:var(--green);border:1px solid rgba(55,208,122,.3)}
+  .b-down{background:rgba(255,77,87,.1);color:var(--red);border:1px solid rgba(255,77,87,.3)}
+  .b-os{background:rgba(57,182,200,.1);color:var(--cyan);border:1px solid rgba(57,182,200,.28)}
+  .b-vuln{background:var(--red);color:#fff;animation:pulse 1.8s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,77,87,.5)}50%{box-shadow:0 0 0 5px rgba(255,77,87,0)}}
+  .b-count{background:var(--panel-2);color:var(--muted);border:1px solid var(--line)}
+  .spacer{flex:1}
+  .h-body{display:none;padding:6px 18px 20px}
+  .host.open .h-body{display:block}
+
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.78rem}
+  th{text-align:left;color:var(--faint);font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;
+    font-weight:600;padding:9px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid rgba(29,37,51,.5);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--panel-2)}
+  .pt{font-weight:700;color:var(--amber)}
+  .proto-tcp{color:var(--cyan)} .proto-udp{color:var(--violet)}
+  .st-open{color:var(--green);font-weight:600}
+  .st-of{color:var(--amber-dim)}
+  .reason{color:var(--faint);font-size:.7rem}
+  .svc{color:var(--ink)} .ver{color:var(--muted);font-size:.74rem}
+  .pill{display:inline-block;background:var(--panel-2);border:1px solid var(--line);color:var(--cyan);
+    padding:2px 8px;border-radius:10px;font-size:.7rem}
+
+  .section{margin-top:16px}
+  .section h4{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .section h4::after{content:"";flex:1;height:1px;background:var(--line)}
+  .script{border:1px solid var(--line);border-radius:3px;margin-bottom:7px;overflow:hidden}
+  .script.v{border-color:#48222a}
+  .script .sid{background:var(--panel-2);padding:7px 11px;font-size:.72rem;color:var(--cyan);
+    display:flex;justify-content:space-between;align-items:center}
+  .script.v .sid{background:var(--red-bg);color:#ff97a0}
+  .script pre{padding:10px 12px;font-size:.72rem;color:var(--muted);white-space:pre-wrap;
+    word-break:break-word;max-height:240px;overflow:auto;line-height:1.45}
+  .script.v pre{color:#d9b6ba}
+  .trace{font-size:.74rem;color:var(--muted)}
+  .trace .hop{display:flex;gap:12px;padding:3px 0}
+  .trace .hop .t{color:var(--faint);width:34px;flex:none}
+  .trace .hop .a{color:var(--cyan)} .trace .hop .r{color:var(--faint);margin-left:auto}
+
+  .empty{text-align:center;padding:70px 20px;color:var(--faint);letter-spacing:.06em;font-size:.86rem}
+  .empty .blink{animation:bl 1.1s steps(2) infinite}
+  @keyframes bl{50%{opacity:0}}
+  .err{border:1px solid #48222a;background:var(--red-bg);color:#ff97a0;padding:16px 18px;border-radius:4px;
+    font-size:.8rem;margin:18px 0;white-space:pre-wrap}
+  .hide{display:none!important}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:var(--line-bright);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="glyph"></div>
+      <div>
+        <h1>RECON<span>//</span>SCAN</h1>
+        <div class="sub">Recon XML Visualizer</div>
+      </div>
+    </div>
+    <div class="meta-line" id="meta"></div>
+  </header>
+
+  <label class="drop" id="drop" for="fileInput">
+    <div class="big">⊹ Drop nmap XML &nbsp;·&nbsp; or click to browse</div>
+    <div class="small">Feed it full_network_scan.xml (TCP + UDP merged) — parses OS, services, NSE scripts &amp; vuln findings, traceroute</div>
+    <input type="file" id="fileInput" accept=".xml,text/xml">
+    <div id="fname"></div>
+  </label>
+
+  <div id="errBox"></div>
+
+  <div class="stats hide" id="stats">
+    <div class="stat s-host"><div class="n" id="st-host">0</div><div class="l">Hosts</div><div class="bar"><i id="bar-host"></i></div></div>
+    <div class="stat s-up"><div class="n" id="st-up">0</div><div class="l">Hosts Up</div><div class="bar"><i id="bar-up"></i></div></div>
+    <div class="stat s-port"><div class="n" id="st-port">0</div><div class="l">Open Ports</div><div class="bar"><i id="bar-port"></i></div></div>
+    <div class="stat s-svc"><div class="n" id="st-svc">0</div><div class="l">Services</div><div class="bar"><i id="bar-svc"></i></div></div>
+    <div class="stat s-vuln"><div class="n" id="st-vuln">0</div><div class="l">Vuln Findings</div><div class="bar"><i id="bar-vuln"></i></div></div>
+  </div>
+
+  <div class="toolbar hide" id="toolbar">
+    <div class="field"><input type="text" id="search" placeholder="› filter by ip · port · service · script · os …"></div>
+    <select id="svcFilter"><option value="">all services</option></select>
+    <div class="seg" id="protoSeg">
+      <button data-p="all" class="on">All</button>
+      <button data-p="tcp">TCP</button>
+      <button data-p="udp">UDP</button>
+    </div>
+    <div class="seg danger"><button id="vulnOnly" data-on="0">Vuln only</button></div>
+    <button class="ghost" id="expand">Expand all</button>
+    <button class="ghost" id="copyIps">Copy live IPs</button>
+    <button class="ghost" id="csv">Export CSV</button>
+  </div>
+
+  <div id="results">
+    <div class="empty">AWAITING SCAN DATA<span class="blink">_</span></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let HOSTS = [];
+let state = { q:"", svc:"", proto:"all", vulnOnly:false, expanded:false };
+
+/* ---------- file intake ---------- */
+const drop = $("drop");
+$("fileInput").addEventListener("change", e => { if(e.target.files[0]) load(e.target.files[0]); });
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hot");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hot");}));
+drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) load(f); });
+
+function load(file){
+  $("fname").textContent = "loading: "+file.name;
+  const r = new FileReader();
+  r.onload = ev => parse(ev.target.result, file.name);
+  r.onerror = () => showErr("Could not read the file.");
+  r.readAsText(file);
+}
+
+function showErr(msg){ $("errBox").innerHTML = '<div class="err">⚠ '+esc(msg)+'</div>'; }
+function clearErr(){ $("errBox").innerHTML=""; }
+
+/* ---------- parsing ---------- */
+function attr(el,n){ return el && el.getAttribute(n); }
+
+function parse(xml, name){
+  clearErr();
+  if(!xml || !xml.trim()){ showErr("File is empty (0 bytes). The scan wrote no output — re-run the scan before visualizing."); return; }
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if(doc.getElementsByTagName("parsererror").length){
+    showErr("This isn't valid XML. Make sure you selected an nmap -oX file (e.g. full_network_scan.xml), not a .gnmap or .nmap file."); return;
+  }
+  const run = doc.querySelector("nmaprun");
+  if(!run){ showErr("No <nmaprun> root found — this doesn't look like nmap XML output."); return; }
+
+  const hostEls = Array.from(doc.getElementsByTagName("host"));
+  const hosts = [];
+  for(const h of hostEls){
+    // address: prefer ipv4, then ipv6, keep mac aside
+    let ip=null, ipv6=null, mac=null, macVendor=null;
+    for(const a of h.getElementsByTagName("address")){
+      const t = attr(a,"addrtype");
+      if(t==="ipv4" && !ip) ip = attr(a,"addr");
+      else if(t==="ipv6" && !ipv6) ipv6 = attr(a,"addr");
+      else if(t==="mac"){ mac = attr(a,"addr"); macVendor = attr(a,"vendor"); }
+    }
+    const display = ip || ipv6 || mac;
+    if(!display) continue;
+
+    const statusEl = h.getElementsByTagName("status")[0];
+    const status = (statusEl && attr(statusEl,"state")) || "unknown";
+    const statusReason = statusEl ? attr(statusEl,"reason") : null;
+
+    const hostnames = Array.from(h.getElementsByTagName("hostname")).map(x=>attr(x,"name")).filter(Boolean);
+
+    // ports
+    const ports = [];
+    for(const p of h.getElementsByTagName("port")){
+      const stEl = p.getElementsByTagName("state")[0];
+      const pstate = stEl ? attr(stEl,"state") : "";
+      if(!pstate || !pstate.startsWith("open")) continue; // open and open|filtered
+      const svc = p.getElementsByTagName("service")[0];
+      const scripts = Array.from(p.children).filter(c=>c.tagName==="script")
+        .map(s=>({id:attr(s,"id")||"script", out:attr(s,"output")||""}));
+      ports.push({
+        port: +attr(p,"portid"),
+        proto: attr(p,"protocol")||"",
+        state: pstate,
+        reason: stEl ? attr(stEl,"reason") : "",
+        service: svc ? (attr(svc,"name")||"unknown") : "unknown",
+        product: svc ? (attr(svc,"product")||"") : "",
+        version: svc ? (attr(svc,"version")||"") : "",
+        extra: svc ? (attr(svc,"extrainfo")||"") : "",
+        tunnel: svc ? (attr(svc,"tunnel")||"") : "",
+        scripts
+      });
+    }
+    ports.sort((a,b)=> a.proto===b.proto ? a.port-b.port : a.proto.localeCompare(b.proto));
+
+    // host-level scripts
+    const hostscripts = [];
+    const hs = h.getElementsByTagName("hostscript")[0];
+    if(hs) for(const s of hs.getElementsByTagName("script"))
+      hostscripts.push({id:attr(s,"id")||"script", out:attr(s,"output")||""});
+
+    // OS
+    let os=null, osAcc=null, osClass=null;
+    const osm = h.getElementsByTagName("osmatch")[0];
+    if(osm){ os = attr(osm,"name"); osAcc = attr(osm,"accuracy");
+      const oc = osm.getElementsByTagName("osclass")[0] || h.getElementsByTagName("osclass")[0];
+      if(oc) osClass = [attr(oc,"vendor"),attr(oc,"osfamily"),attr(oc,"osgen")].filter(Boolean).join(" ");
+    }
+
+    // traceroute
+    const trace = Array.from(h.querySelectorAll("trace hop")).map(hop=>({
+      ttl:attr(hop,"ttl"), ip:attr(hop,"ipaddr"), rtt:attr(hop,"rtt"), host:attr(hop,"host")
+    }));
+
+    // vuln detection across all script output
+    const allScriptText = [...ports.flatMap(p=>p.scripts), ...hostscripts]
+      .map(s=>s.out).join("\n");
+    const vuln = /VULNERABLE|CVE-\d{4}-\d+/i.test(allScriptText);
+
+    hosts.push({ ip:display, ipv4:ip, ipv6, mac, macVendor, status, statusReason,
+      hostnames, ports, hostscripts, os, osAcc, osClass, trace, vuln });
+  }
+
+  // sort by IPv4 numeric where possible
+  hosts.sort((a,b)=> ipKey(a.ip)-ipKey(b.ip) || a.ip.localeCompare(b.ip));
+
+  HOSTS = hosts;
+  $("fname").textContent = "loaded: "+name+"  ·  "+hosts.length+" host(s)";
+  renderMeta(run);
+  buildServiceFilter();
+  renderStats();
+  render();
+  $("stats").classList.remove("hide");
+  $("toolbar").classList.remove("hide");
+  if(!hosts.length) showErr("Parsed OK, but the scan contains no hosts. If this is a discovery file with no open ports, that's expected.");
+}
+
+function ipKey(ip){
+  const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(ip||"");
+  return m ? (((+m[1]*256)+ +m[2])*256+ +m[3])*256+ +m[4] : Number.MAX_SAFE_INTEGER;
+}
+
+/* ---------- meta ---------- */
+function renderMeta(run){
+  const scanner = attr(run,"scanner")||"nmap";
+  const ver = attr(run,"version")||"";
+  const startstr = attr(run,"startstr") || (attr(run,"start") ? new Date(attr(run,"start")*1000).toUTCString() : "");
+  const args = attr(run,"args")||"";
+  // merged file joins TCP || UDP args
+  const argParts = args.split("||").map(s=>s.trim()).filter(Boolean);
+  let html = '<b>'+esc(scanner)+(ver?(' '+esc(ver)):'')+'</b>';
+  if(startstr) html += '  ·  '+esc(startstr);
+  if(argParts.length) html += '<span class="args">'+argParts.map(esc).join('<br>')+'</span>';
+  $("meta").innerHTML = html;
+}
+
+/* ---------- stats ---------- */
+function renderStats(){
+  const up = HOSTS.filter(h=>h.status==="up").length;
+  const openPorts = HOSTS.reduce((s,h)=>s+h.ports.length,0);
+  const svc = new Set(HOSTS.flatMap(h=>h.ports.map(p=>p.service))); svc.delete("unknown");
+  const vulnFindings = HOSTS.reduce((s,h)=>{
+    const scripts=[...h.ports.flatMap(p=>p.scripts),...h.hostscripts];
+    return s + scripts.filter(x=>/VULNERABLE|CVE-\d{4}-\d+/i.test(x.out)).length;
+  },0);
+  setStat("host",HOSTS.length,Math.max(HOSTS.length,1));
+  setStat("up",up,Math.max(HOSTS.length,1));
+  setStat("port",openPorts,Math.max(openPorts,1));
+  setStat("svc",svc.size,Math.max(svc.size,1));
+  setStat("vuln",vulnFindings,Math.max(vulnFindings,1));
+}
+function setStat(k,val,max){
+  $("st-"+k).textContent = val;
+  requestAnimationFrame(()=>{ $("bar-"+k).style.width = Math.min(100,(val/max)*100)+"%"; });
+}
+
+/* ---------- service filter ---------- */
+function buildServiceFilter(){
+  const sel = $("svcFilter");
+  const services = Array.from(new Set(HOSTS.flatMap(h=>h.ports.map(p=>p.service)))).sort();
+  sel.innerHTML = '<option value="">all services ('+services.length+')</option>'+
+    services.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join("");
+}
+
+/* ---------- filtering ---------- */
+function visibleHosts(){
+  const q = state.q.toLowerCase();
+  return HOSTS.filter(h=>{
+    if(state.vulnOnly && !h.vuln) return false;
+    const portsProto = state.proto==="all" ? h.ports : h.ports.filter(p=>p.proto===state.proto);
+    if(state.proto!=="all" && portsProto.length===0 && h.ports.length>0) return false;
+    if(state.svc && !h.ports.some(p=>p.service===state.svc)) return false;
+    if(q){
+      const hay = [h.ip,h.ipv6,h.mac,...h.hostnames,h.os,h.osClass,
+        ...h.ports.map(p=>p.port+" "+p.service+" "+p.product+" "+p.version),
+        ...h.ports.flatMap(p=>p.scripts.map(s=>s.id+" "+s.out)),
+        ...h.hostscripts.map(s=>s.id+" "+s.out)
+      ].filter(Boolean).join(" ").toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  const hosts = visibleHosts();
+  const box = $("results");
+  if(!hosts.length){ box.innerHTML='<div class="empty">NO HOSTS MATCH FILTER<span class="blink">_</span></div>'; return; }
+  box.innerHTML = hosts.map((h,i)=>hostCard(h,i)).join("");
+  // wire toggles
+  box.querySelectorAll(".h-head").forEach(el=>el.addEventListener("click",()=>el.parentElement.classList.toggle("open")));
+}
+
+function hostCard(h,i){
+  const proto = state.proto;
+  const ports = proto==="all" ? h.ports : h.ports.filter(p=>p.proto===proto);
+  const tcpN = h.ports.filter(p=>p.proto==="tcp").length;
+  const udpN = h.ports.filter(p=>p.proto==="udp").length;
+
+  const badges = [];
+  if(h.vuln) badges.push('<span class="badge b-vuln">⚠ Vuln</span>');
+  if(h.os) badges.push('<span class="badge b-os" title="'+esc(h.osClass||"")+' · '+esc(h.osAcc||"")+'% match">'+esc(trim(h.os,34))+'</span>');
+  badges.push('<span class="badge b-count">'+tcpN+' tcp · '+udpN+' udp</span>');
+  badges.push('<span class="badge '+(h.status==="up"?"b-up":"b-down")+'">'+esc(h.status)+'</span>');
+
+  const rows = ports.map(p=>{
+    const ver = [p.product,p.version,p.extra&&("("+p.extra+")"),p.tunnel&&("/"+p.tunnel)].filter(Boolean).join(" ");
+    return '<tr>'+
+      '<td class="pt">'+p.port+'</td>'+
+      '<td class="proto-'+p.proto+'">'+esc(p.proto)+'</td>'+
+      '<td class="'+(p.state==="open"?"st-open":"st-of")+'">'+esc(p.state)+'</td>'+
+      '<td><span class="pill">'+esc(p.service)+'</span></td>'+
+      '<td class="ver">'+(esc(ver)||'<span class="reason">—</span>')+'</td>'+
+      '<td class="reason">'+esc(p.reason||"")+'</td>'+
+    '</tr>';
+  }).join("");
+
+  const portScripts = ports.flatMap(p=>p.scripts.map(s=>({...s,port:p.port,proto:p.proto})));
+  const scriptHtml = [...portScripts, ...h.hostscripts.map(s=>({...s,port:null}))]
+    .map(s=>scriptBlock(s)).join("");
+
+  let traceHtml = "";
+  if(h.trace.length){
+    traceHtml = '<div class="section"><h4>traceroute</h4><div class="trace">'+
+      h.trace.map(hop=>'<div class="hop"><span class="t">'+esc(hop.ttl||"")+'</span>'+
+        '<span class="a">'+esc(hop.ip||"*")+'</span>'+(hop.host?'<span class="reason">'+esc(hop.host)+'</span>':'')+
+        '<span class="r">'+(hop.rtt?esc(hop.rtt)+' ms':'')+'</span></div>').join("")+'</div></div>';
+  }
+
+  const sub = [];
+  if(h.hostnames.length) sub.push(h.hostnames.join(", "));
+  if(h.ipv4 && h.ip!==h.ipv4) sub.push(h.ipv4);
+  if(h.mac) sub.push("MAC "+h.mac+(h.macVendor?(" · "+h.macVendor):""));
+
+  return '<div class="host'+(h.vuln?' vuln':'')+(state.expanded?' open':'')+'" style="animation-delay:'+Math.min(i*22,400)+'ms">'+
+    '<div class="h-head">'+
+      '<span class="chev">▶</span>'+
+      '<div><div class="ip">'+esc(h.ip)+'</div>'+(sub.length?'<div class="hn">'+esc(sub.join("  ·  "))+'</div>':'')+'</div>'+
+      '<span class="spacer"></span>'+ badges.join("")+
+    '</div>'+
+    '<div class="h-body">'+
+      (ports.length?
+        '<table><thead><tr><th>Port</th><th>Proto</th><th>State</th><th>Service</th><th>Version / Product</th><th>Reason</th></tr></thead><tbody>'+rows+'</tbody></table>'
+        : '<div class="reason" style="padding:10px 2px">No open ports for this protocol filter.</div>')+
+      (scriptHtml?'<div class="section"><h4>nse scripts</h4>'+scriptHtml+'</div>':'')+
+      traceHtml+
+    '</div>'+
+  '</div>';
+}
+
+function scriptBlock(s){
+  const v = /VULNERABLE|CVE-\d{4}-\d+/i.test(s.out);
+  const tag = (s.port?("["+s.port+"] "):"")+ s.id;
+  return '<div class="script'+(v?' v':'')+'">'+
+    '<div class="sid"><span>'+esc(tag)+'</span>'+(v?'<span class="badge b-vuln" style="animation:none">vuln</span>':'')+'</div>'+
+    '<pre>'+esc(s.out||"(no output)")+'</pre></div>';
+}
+
+/* ---------- controls ---------- */
+$("search").addEventListener("input",e=>{state.q=e.target.value;render();});
+$("svcFilter").addEventListener("change",e=>{state.svc=e.target.value;render();});
+$("protoSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  state.proto=b.dataset.p;
+  $("protoSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+  render();
+});
+$("vulnOnly").addEventListener("click",e=>{
+  state.vulnOnly=!state.vulnOnly;
+  e.target.classList.toggle("on",state.vulnOnly);
+  render();
+});
+$("expand").addEventListener("click",e=>{
+  state.expanded=!state.expanded;
+  e.target.textContent=state.expanded?"Collapse all":"Expand all";
+  render();
+});
+$("copyIps").addEventListener("click",()=>{
+  const ips=visibleHosts().map(h=>h.ipv4||h.ip).filter(Boolean).join("\n");
+  navigator.clipboard.writeText(ips).then(()=>flash("copyIps","Copied "+ips.split("\n").length+" IPs"));
+});
+$("csv").addEventListener("click",exportCsv);
+
+function flash(id,msg){ const b=$(id),t=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=t,1400); }
+
+function exportCsv(){
+  const rows=[["ip","hostname","os","port","protocol","state","service","product","version","reason","vulnerable"]];
+  visibleHosts().forEach(h=>{
+    const vp = new Set();
+    [...h.ports.flatMap(p=>p.scripts.map(s=>({port:p.port,out:s.out})))].forEach(s=>{ if(/VULNERABLE|CVE-\d{4}-\d+/i.test(s.out)) vp.add(s.port); });
+    if(!h.ports.length) rows.push([h.ipv4||h.ip,h.hostnames.join("|"),h.os||"","","","","","","","",""]);
+    h.ports.forEach(p=>rows.push([
+      h.ipv4||h.ip, h.hostnames.join("|"), h.os||"", p.port, p.proto, p.state,
+      p.service, p.product, p.version, p.reason, vp.has(p.port)?"yes":""
+    ]));
+  });
+  const csv=rows.map(r=>r.map(c=>{c=String(c==null?"":c);return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(",")).join("\n");
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  const a=document.createElement("a"); a.href=url; a.download="scan_export.csv"; a.click();
+  URL.revokeObjectURL(url); flash("csv","Exported");
+}
+
+/* ---------- util ---------- */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function trim(s,n){ s=String(s||""); return s.length>n?s.slice(0,n-1)+"…":s; }
+</script>
+</body>
+</html>
